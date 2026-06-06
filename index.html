@@ -192,6 +192,7 @@
 import * as THREE from 'three';
 import { OrbitControls } from 'three/addons/OrbitControls.js';
 import { GLTFLoader } from 'three/addons/GLTFLoader.js';
+import { DRACOLoader } from 'three/addons/loaders/DRACOLoader.js';
 
 const $loaderText = document.getElementById('loader-text');
 const $loaderErr = document.getElementById('loader-err');
@@ -252,7 +253,12 @@ scene.add(ground);
 
 // 加载模型
 let car, bodyMeshes = [];
+const dracoLoader = new DRACOLoader();
+dracoLoader.setDecoderPath('./libs/draco/');
+dracoLoader.setDecoderConfig({ type: 'wasm' });
+
 const loader = new GLTFLoader();
+loader.setDRACOLoader(dracoLoader);
 
 $loaderText.textContent = '下载模型中...';
 
