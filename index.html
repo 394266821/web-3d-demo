@@ -1,0 +1,372 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+<meta name="theme-color" content="#0a0a1e">
+<title>3D Car Viewer · Three.js Demo</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  html, body {
+    width: 100%; height: 100%;
+    background: linear-gradient(180deg, #0a0a1e 0%, #1a1a3e 100%);
+    color: #fff;
+    font-family: -apple-system, BlinkMacSystemFont, "PingFang SC", "Microsoft YaHei", sans-serif;
+    overflow: hidden;
+    -webkit-user-select: none; user-select: none;
+  }
+  #canvas-wrap { position: fixed; inset: 0; }
+  canvas { display: block; touch-action: none; }
+
+  /* 顶部信息 */
+  .top-bar {
+    position: fixed;
+    top: 0; left: 0; right: 0;
+    padding: 16px 20px;
+    background: linear-gradient(180deg, rgba(0,0,0,0.6), transparent);
+    pointer-events: none;
+    z-index: 10;
+  }
+  .top-bar h1 { font-size: 18px; font-weight: 600; letter-spacing: 0.5px; }
+  .top-bar p { font-size: 12px; color: rgba(255,255,255,0.6); margin-top: 2px; }
+
+  /* 加载状态 */
+  .loader {
+    position: fixed; top: 50%; left: 50%;
+    transform: translate(-50%, -50%);
+    text-align: center;
+    z-index: 20;
+    transition: opacity 0.5s;
+  }
+  .loader.hide { opacity: 0; pointer-events: none; }
+  .spinner {
+    width: 48px; height: 48px;
+    border: 3px solid rgba(255,255,255,0.1);
+    border-top-color: #ff6b9d;
+    border-radius: 50%;
+    margin: 0 auto 12px;
+    animation: spin 0.8s linear infinite;
+  }
+  @keyframes spin { to { transform: rotate(360deg); } }
+  .loader p { font-size: 13px; color: rgba(255,255,255,0.7); }
+
+  /* 底部控制面板 */
+  .panel {
+    position: fixed;
+    bottom: 0; left: 0; right: 0;
+    padding: 16px 20px 24px;
+    background: linear-gradient(0deg, rgba(0,0,0,0.7), transparent);
+    z-index: 10;
+  }
+  .panel-section { margin-bottom: 14px; }
+  .panel-section:last-child { margin-bottom: 0; }
+  .panel-label {
+    font-size: 11px;
+    color: rgba(255,255,255,0.5);
+    text-transform: uppercase;
+    letter-spacing: 1.5px;
+    margin-bottom: 8px;
+  }
+
+  /* 颜色选择器 */
+  .colors {
+    display: flex; gap: 10px;
+    flex-wrap: wrap;
+  }
+  .swatch {
+    width: 38px; height: 38px;
+    border-radius: 50%;
+    cursor: pointer;
+    border: 2px solid rgba(255,255,255,0.2);
+    transition: all 0.2s;
+    position: relative;
+  }
+  .swatch.active {
+    border-color: #ff6b9d;
+    transform: scale(1.15);
+    box-shadow: 0 0 16px rgba(255,107,157,0.5);
+  }
+  .swatch:active { transform: scale(0.95); }
+
+  /* 视图按钮 */
+  .views {
+    display: flex; gap: 8px;
+    flex-wrap: wrap;
+  }
+  .btn {
+    padding: 8px 16px;
+    background: rgba(255,255,255,0.08);
+    border: 1px solid rgba(255,255,255,0.15);
+    color: #fff;
+    border-radius: 20px;
+    font-size: 13px;
+    cursor: pointer;
+    transition: all 0.2s;
+    backdrop-filter: blur(10px);
+  }
+  .btn:hover, .btn.active {
+    background: rgba(255,107,157,0.2);
+    border-color: #ff6b9d;
+  }
+  .btn:active { transform: scale(0.95); }
+
+  /* 提示 */
+  .hint {
+    position: fixed;
+    bottom: 200px;
+    left: 50%;
+    transform: translateX(-50%);
+    font-size: 11px;
+    color: rgba(255,255,255,0.4);
+    pointer-events: none;
+    z-index: 5;
+    animation: fade-hint 5s forwards;
+  }
+  @keyframes fade-hint {
+    0%, 70% { opacity: 1; }
+    100% { opacity: 0; }
+  }
+
+  /* 技术栈标签 */
+  .stack {
+    position: fixed;
+    top: 16px; right: 16px;
+    font-size: 10px;
+    color: rgba(255,255,255,0.4);
+    background: rgba(0,0,0,0.3);
+    padding: 4px 8px;
+    border-radius: 4px;
+    backdrop-filter: blur(10px);
+    z-index: 10;
+  }
+</style>
+</head>
+<body>
+<div id="canvas-wrap"></div>
+
+<div class="top-bar">
+  <h1>🏎️ Ferrari 458 Italia</h1>
+  <p>3D 展示 · 拖动旋转 · 滚轮缩放</p>
+</div>
+
+<div class="stack">Three.js · GLB · GitHub Pages</div>
+
+<div class="hint">👆 拖动汽车 · 滚轮缩放</div>
+
+<div class="loader" id="loader">
+  <div class="spinner"></div>
+  <p>加载中...</p>
+</div>
+
+<div class="panel">
+  <div class="panel-section">
+    <div class="panel-label">车身颜色</div>
+    <div class="colors" id="colors">
+      <div class="swatch active" style="background:#c0392b" data-color="#c0392b" data-name="Rosso Corsa"></div>
+      <div class="swatch" style="background:#1a1a1a" data-color="#1a1a1a" data-name="Nero Daytona"></div>
+      <div class="swatch" style="background:#ecf0f1" data-color="#ecf0f1" data-name="Bianco Avus"></div>
+      <div class="swatch" style="background:#2c3e50" data-color="#2c3e50" data-name="Blu Tour de France"></div>
+      <div class="swatch" style="background:#f1c40f" data-color="#f1c40f" data-name="Giallo Modena"></div>
+      <div class="swatch" style="background:#7f8c8d" data-color="#7f8c8d" data-name="Grigio Titanio"></div>
+    </div>
+  </div>
+
+  <div class="panel-section">
+    <div class="panel-label">视角</div>
+    <div class="views">
+      <button class="btn active" data-view="default">正面</button>
+      <button class="btn" data-view="side">侧面</button>
+      <button class="btn" data-view="top">俯视</button>
+      <button class="btn" data-view="back">尾部</button>
+      <button class="btn" data-view="auto">🔄 自动旋转</button>
+    </div>
+  </div>
+</div>
+
+<script type="importmap">
+{
+  "imports": {
+    "three": "https://unpkg.com/three@0.160.0/build/three.module.js",
+    "three/addons/": "https://unpkg.com/three@0.160.0/examples/jsm/"
+  }
+}
+</script>
+
+<script type="module">
+import * as THREE from 'three';
+import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
+
+// 场景
+const scene = new THREE.Scene();
+scene.background = null;  // 让 CSS 背景透出来
+
+// 相机
+const camera = new THREE.PerspectiveCamera(45, innerWidth/innerHeight, 0.1, 100);
+const defaultCam = { pos: new THREE.Vector3(4, 1.5, 5), target: new THREE.Vector3(0, 0.7, 0) };
+camera.position.copy(defaultCam.pos);
+
+const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
+renderer.setSize(innerWidth, innerHeight);
+renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
+renderer.toneMapping = THREE.ACESFilmicToneMapping;
+renderer.toneMappingExposure = 1.2;
+renderer.shadowMap.enabled = true;
+renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+document.getElementById('canvas-wrap').appendChild(renderer.domElement);
+
+// 控制器
+const controls = new OrbitControls(camera, renderer.domElement);
+controls.enableDamping = true;
+controls.dampingFactor = 0.05;
+controls.minDistance = 2.5;
+controls.maxDistance = 12;
+controls.minPolarAngle = 0.1;
+controls.maxPolarAngle = Math.PI / 2 - 0.05;
+controls.target.copy(defaultCam.target);
+
+// 光照
+scene.add(new THREE.AmbientLight(0xffffff, 0.4));
+
+const sunLight = new THREE.DirectionalLight(0xffffff, 2);
+sunLight.position.set(5, 8, 3);
+sunLight.castShadow = true;
+sunLight.shadow.mapSize.set(2048, 2048);
+sunLight.shadow.camera.near = 0.1;
+sunLight.shadow.camera.far = 20;
+sunLight.shadow.camera.left = -5;
+sunLight.shadow.camera.right = 5;
+sunLight.shadow.camera.top = 5;
+sunLight.shadow.camera.bottom = -5;
+scene.add(sunLight);
+
+// 蓝色补光（让阴影有冷暖对比）
+const fillLight = new THREE.DirectionalLight(0x88aaff, 0.5);
+fillLight.position.set(-3, 4, -2);
+scene.add(fillLight);
+
+// 地面（带阴影接收）
+const ground = new THREE.Mesh(
+  new THREE.PlaneGeometry(50, 50),
+  new THREE.ShadowMaterial({ opacity: 0.3 })
+);
+ground.rotation.x = -Math.PI / 2;
+ground.receiveShadow = true;
+scene.add(ground);
+
+// 加载模型
+let car, bodyMeshes = [];
+const loader = new GLTFLoader();
+
+loader.load('ferrari.glb', (gltf) => {
+  car = gltf.scene;
+  car.scale.set(1, 1, 1);
+
+  // 启用阴影
+  car.traverse(node => {
+    if (node.isMesh) {
+      node.castShadow = true;
+      // 识别可换色部件（车身材质）
+      const mat = node.material;
+      if (mat && mat.name && /body|paint|chassis|carrosserie/i.test(mat.name)) {
+        bodyMeshes.push(node);
+      }
+    }
+  });
+
+  // 如果没找到 body 标签，标记所有高 metalness 的 mesh
+  if (bodyMeshes.length === 0) {
+    car.traverse(node => {
+      if (node.isMesh && node.material && node.material.metalness > 0.3) {
+        bodyMeshes.push(node);
+      }
+    });
+  }
+
+  // 调整位置
+  const box = new THREE.Box3().setFromObject(car);
+  const center = box.getCenter(new THREE.Vector3());
+  car.position.sub(center);
+  car.position.y = 0;
+
+  scene.add(car);
+
+  document.getElementById('loader').classList.add('hide');
+}, undefined, (err) => {
+  console.error('加载失败:', err);
+  document.querySelector('.loader p').textContent = '加载失败 - 请检查网络';
+});
+
+// 颜色切换
+document.querySelectorAll('.swatch').forEach(sw => {
+  sw.addEventListener('click', () => {
+    document.querySelectorAll('.swatch').forEach(s => s.classList.remove('active'));
+    sw.classList.add('active');
+    const color = new THREE.Color(sw.dataset.color);
+    bodyMeshes.forEach(m => {
+      if (m.material.color) m.material.color.copy(color);
+    });
+  });
+});
+
+// 视角切换
+const views = {
+  default: { pos: new THREE.Vector3(4, 1.5, 5), target: new THREE.Vector3(0, 0.7, 0) },
+  side:    { pos: new THREE.Vector3(6, 1, 0), target: new THREE.Vector3(0, 0.7, 0) },
+  top:     { pos: new THREE.Vector3(0, 6, 0.1), target: new THREE.Vector3(0, 0, 0) },
+  back:    { pos: new THREE.Vector3(-3, 1.5, -5), target: new THREE.Vector3(0, 0.7, 0) },
+};
+let autoRotate = false;
+
+document.querySelectorAll('.btn[data-view]').forEach(btn => {
+  btn.addEventListener('click', () => {
+    document.querySelectorAll('.btn[data-view]').forEach(b => b.classList.remove('active'));
+    btn.classList.add('active');
+    const view = btn.dataset.view;
+    if (view === 'auto') {
+      autoRotate = !autoRotate;
+      controls.autoRotate = autoRotate;
+      controls.autoRotateSpeed = 1.0;
+      if (autoRotate) btn.classList.add('active');
+    } else {
+      autoRotate = false;
+      controls.autoRotate = false;
+      animateCamera(views[view]);
+    }
+  });
+});
+
+// 相机动画
+function animateCamera(target) {
+  const startPos = camera.position.clone();
+  const startTarget = controls.target.clone();
+  const duration = 1200;
+  const startTime = performance.now();
+
+  function step(now) {
+    const t = Math.min((now - startTime) / duration, 1);
+    const ease = t < 0.5 ? 2*t*t : 1 - Math.pow(-2*t+2, 2)/2;  // ease-in-out
+    camera.position.lerpVectors(startPos, target.pos, ease);
+    controls.target.lerpVectors(startTarget, target.target, ease);
+    if (t < 1) requestAnimationFrame(step);
+  }
+  requestAnimationFrame(step);
+}
+
+// 渲染循环
+function animate() {
+  requestAnimationFrame(animate);
+  controls.update();
+  renderer.render(scene, camera);
+}
+animate();
+
+// 自适应
+window.addEventListener('resize', () => {
+  camera.aspect = innerWidth / innerHeight;
+  camera.updateProjectionMatrix();
+  renderer.setSize(innerWidth, innerHeight);
+});
+</script>
+</body>
+</html>
